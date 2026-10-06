@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare version and Magisk installer
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import os
+          import re
+          import urllib.request
+          import zipfile
+          from pathlib import Path
+
+          match = re.fullmatch(
+              r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)", os.environ["RELEASE_TAG"]
+          )
+          if match is None:
+              raise ValueError("Use a vMAJOR.MINOR.PATCH tag; minor and patch must be below 100")
+          major, minor, patch = map(int, match.groups())
+          # Two decimal places per minor and patch preserve versionCode ordering.
+          version_code = major * 10000 + minor * 100 + patch
+          if version_code > 2147483647:
+              raise ValueError("versionCode exceeds the supported integer range")
+          with Path(os.environ["GITHUB_ENV"]).open("a") as environment:
+              environment.write(f"VERSION={match[0][1:]}\nVERSION_CODE={version_code}\n")
+
+          url = "https://raw.githubusercontent.com/topjohnwu/Magisk/e8a58776f1d7bdf852072ad0baa6eceb9a1e4aac/scripts/module_installer.sh"
+          with urllib.request.urlopen(url, timeout=30) as source:
+              installer = source.read()
+          if (
+              hashlib.sha256(installer).hexdigest()
+              != "bcf4b1d9913f3af17755569c853e0b5a75b8005f6a18eb3f86dadcc0e968c29d"
+          ):
+              raise ValueError("Magisk installer SHA-256 mismatch")
+          with zipfile.ZipFile(
+              Path(os.environ["RUNNER_TEMP"]) / "installer.zip", "x", zipfile.ZIP_DEFLATED
+          ) as archive:
+              archive.writestr("META-INF/com/google/android/update-binary", installer)
+              archive.writestr("META-INF/com/google/android/updater-script", "#MAGISK")
+          PY
+
+      - name: Compile Android adapter and build module
+        shell: bash
+        run: |
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" \
+            --target=aarch64-linux-android31 -Wall -Wextra -Werror -O2 -fPIC -shared \
+            heap-untag.c -o "$RUNNER_TEMP/libheap-untag.so"
+          python3 build.py \
+            --installer "$RUNNER_TEMP/installer.zip" \
+            --installer-sha256 "$(sha256sum "$RUNNER_TEMP/installer.zip" | cut -d ' ' -f 1)" \
+            --library "$RUNNER_TEMP/libheap-untag.so" \
+            --library-sha256 "$(sha256sum "$RUNNER_TEMP/libheap-untag.so" | cut -d ' ' -f 1)" \
+            --version "$VERSION" --version-code "$VERSION_CODE" \
+            --output "dist/samba-magisk-$VERSION.zip"
+          git for-each-ref --format='%(contents)' "refs/tags/$RELEASE_TAG" > dist/changelog.md
+          cd dist
+          sha256sum "samba-magisk-$VERSION.zip" > "samba-magisk-$VERSION.zip.sha256"
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          gh release create "$RELEASE_TAG" \
+            "dist/samba-magisk-$VERSION.zip" "dist/samba-magisk-$VERSION.zip.sha256" \
+            dist/update.json dist/changelog.md \
+            --verify-tag --title "Samba for Magisk $VERSION" --notes-from-tag
