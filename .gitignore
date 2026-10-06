@@ -1,0 +1,14 @@
+/config.toml
+/smb.conf
+/private/
+/upstream/
+/dist/
+.env
+.env.*
+*.key
+*.pem
+*.log
+*.tdb
+*.so
+__pycache__/
+.ruff_cache/

@@ -1,0 +1,54 @@
+[global]
+    server role = standalone server
+    workgroup = WORKGROUP
+    netbios name = ANDROID
+    security = user
+    map to guest = Never
+    restrict anonymous = 2
+    server min protocol = SMB3_00
+    server smb encrypt = required
+
+    # The module supplies the actual interface addresses and allowed mesh subnet.
+    interfaces = 127.0.0.1/8
+    bind interfaces only = yes
+    hosts allow = 127.0.0.0/8
+    hosts deny = ALL
+    smb ports = 445
+    disable netbios = yes
+    multicast dns register = no
+    local master = no
+    preferred master = no
+    host msdfs = no
+
+    private dir = /data/adb/samba/private
+    state directory = /data/adb/samba/state
+    cache directory = /data/adb/samba/cache
+    lock directory = /data/adb/samba/lock
+    pid directory = /data/adb/samba/run
+    log file = /data/adb/samba/log/smbd.log
+    max log size = 1024
+    logging = file
+    enable core files = no
+    passdb backend = tdbsam
+
+    load printers = no
+    disable spoolss = yes
+    printing = bsd
+    printcap name = /dev/null
+
+[storage]
+    path = /storage/emulated/0
+    valid users = example
+    read only = no
+    guest ok = no
+    browseable = yes
+    # Keep root file operations within the configured shared storage.
+    wide links = no
+    follow symlinks = no
+    nt acl support = no
+    ea support = no
+    store dos attributes = no
+    map archive = no
+    map hidden = no
+    map system = no
+    map readonly = no

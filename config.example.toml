@@ -1,0 +1,5 @@
+# Save as /data/adb/samba/config.toml and select the sharing interface and subnet.
+interface = "tun0"
+subnet = "192.0.2.0/24"
+state_dir = "/data/adb/samba"
+termux_prefix = "/data/data/com.termux/files/usr"
